@@ -7,124 +7,95 @@ interface AnalysisRequest {
   yourChamp: string;
   enemyChamp: string;
   role: string;
-  buildData: unknown;
+  itemCatalog: Record<string, { name: string; tags: string[] }>;
 }
 
-function extractBuildSummary(raw: unknown): string {
-  if (!raw || typeof raw !== "object") return "Données de build non disponibles.";
-
-  const r = raw as Record<string, unknown>;
-
-  const lines: string[] = [];
-
-  // Try to extract items
-  if (r.items && typeof r.items === "object") {
-    const items = r.items as Record<string, unknown>;
-    const itemNames = Object.values(items)
-      .flat()
-      .slice(0, 15)
-      .map((item: unknown) => {
-        if (typeof item === "object" && item !== null) {
-          const i = item as Record<string, unknown>;
-          return i.name || i.n || i.item_name || null;
-        }
-        return null;
-      })
-      .filter(Boolean);
-    if (itemNames.length > 0) {
-      lines.push(`Items populaires: ${itemNames.join(", ")}`);
-    }
-  }
-
-  // Try to extract runes
-  if (r.runes && typeof r.runes === "object") {
-    lines.push("Runes: données disponibles");
-  }
-
-  // Try win rate
-  if (r.header && typeof r.header === "object") {
-    const h = r.header as Record<string, unknown>;
-    if (h.wr) lines.push(`Winrate global: ${Number(h.wr).toFixed(1)}%`);
-    if (h.pick) lines.push(`Pick rate: ${Number(h.pick).toFixed(2)}%`);
-    if (h.patch) lines.push(`Patch: ${h.patch}`);
-  }
-
-  return lines.length > 0 ? lines.join("\n") : "Données Lolalytics disponibles mais format non reconnu.";
+export interface AnalysisResponse {
+  build: {
+    startItems: string[];       // item names
+    firstItem: string;
+    coreItems: string[];        // 3-4 items names
+    boots: string;
+    situational: string[];
+    runes: {
+      keystone: string;
+      primary: string[];
+      secondary: string[];
+    };
+    spells: string[];
+  };
+  analysis: string;             // markdown analysis text
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: AnalysisRequest = await req.json();
-    const { yourChamp, enemyChamp, role, buildData } = body;
+    const { yourChamp, enemyChamp, role, itemCatalog } = body;
 
-    const buildSummary = extractBuildSummary(buildData);
+    // Build a concise item name list for the AI to reference
+    const itemNames = Object.values(itemCatalog)
+      .map(i => i.name)
+      .join(", ");
 
-    const prompt = `Tu es un expert League of Legends (LoL) qui analyse des matchups pour des joueurs souhaitant monter en elo.
+    const systemPrompt = `Tu es un coach League of Legends Diamond+ spécialisé dans les matchups.
+Tu as une connaissance parfaite du patch actuel (patch 16.6.1, Saison 2025) et de tous les items disponibles.
+Tu réponds TOUJOURS en français.
+Tu dois UNIQUEMENT utiliser des items qui existent dans la liste fournie. Ne jamais inventer des items.
+Les items populaires en méta actuelle incluent (selon les rôles) : Éclipse, Brèche de Serylda, Cyclosabre voltaïque, Lame de l'infini, Kraken, Sceptre ange gardien, Rabadon, Luden, Heartsteel, Triforce, etc.`;
 
-MATCHUP À ANALYSER:
-- Champion joué: ${yourChamp} (${role})
-- Champion ennemi: ${enemyChamp}
-- Données Lolalytics (patch actuel, Emerald+):
-${buildSummary}
+    const userPrompt = `MATCHUP: ${yourChamp} (${role}) vs ${enemyChamp}
 
-Fournis une analyse COMPLÈTE et PRATIQUE du matchup. Inclus obligatoirement:
+Items disponibles dans le patch actuel (extrait) : ${itemNames.slice(0, 2000)}
 
-## Build optimal pour ce matchup
-Liste les items recommandés dans l'ordre, en adaptant selon la menace de ${enemyChamp}. Utilise les données Lolalytics ci-dessus + ta connaissance des items actuels. Précise:
-- Items de départ
-- Premier item / Mythique conseillé
-- Items core (3-4 items essentiels)
-- Bottes recommandées
-- Items situationnels si ${enemyChamp} est difficile
+Réponds avec un JSON STRICTEMENT valide dans ce format (et RIEN d'autre avant ou après le JSON):
+{
+  "build": {
+    "startItems": ["nom item 1", "nom item 2"],
+    "firstItem": "Nom du 1er item complet à acheter",
+    "coreItems": ["item 2", "item 3", "item 4"],
+    "boots": "Nom des bottes",
+    "situational": ["item situationnel 1 si ${enemyChamp} fed"],
+    "runes": {
+      "keystone": "Nom de la keystone",
+      "primary": ["rune 1", "rune 2", "rune 3"],
+      "secondary": ["rune 1", "rune 2"]
+    },
+    "spells": ["Éclair", "Ignition"]
+  },
+  "analysis": "## Build optimal\\n\\nExplication ici...\\n\\n## Phase de couloir (Early)\\n\\nConseils early...\\n\\n## Mid game\\n\\nConseils mid...\\n\\n## Late game\\n\\nConseils late...\\n\\n## Résumé\\n\\n- Point clé 1\\n- Point clé 2\\n- Point clé 3"
+}
 
-## Runes recommandées
-Page de runes complète adaptée à ce matchup.
-
-## Sorts d'invocateur
-Quels sorts prendre et pourquoi dans ce matchup.
-
-## Phase de couloir (Early game - 1 à 15 min)
-- Comment jouer les premiers niveaux
-- Quand prendre les trades
-- Quand farmer prudemment
-- Capacités dangereuses de ${enemyChamp} à éviter (avec leur touche clavier)
-- Condition de spike fort / faible de ${yourChamp}
-
-## Mid game (15 à 25 min)
-- Objectifs à prioriser
-- Comment utiliser ton avantage ou rattraper le retard
-- Positionnement en teamfight vs ${enemyChamp}
-
-## Late game (25 min+)
-- Condition de victoire
-- Que faire si ${enemyChamp} est fed
-- Composition d'équipe idéale avec ${yourChamp}
-
-## Résumé tactique
-3 bullet points essentiels à retenir pour gagner ce matchup.
-
-Sois précis, actuel (patch actuel), et pratique. Utilise des emojis pour la lisibilité.`;
+IMPORTANT:
+- Pour ${yourChamp}, utilise les items META ACTUELS (patch 16.6.1)
+- L'item "firstItem" doit être le mythique/premier item recommandé pour ce matchup spécifique
+- L'analysis doit être détaillée avec les spells de ${enemyChamp} à éviter (avec leur lettre: Q/W/E/R)
+- Utilise les VRAIS noms français des items tels qu'ils apparaissent dans le jeu`;
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
-        {
-          role: "system",
-          content: `Tu es un coach LoL expert Diamond+ spécialisé dans les matchups. Tu connais parfaitement les items, builds et méta du patch actuel (saison 2025). Tu donnes des conseils précis et actionnables. Tu réponds toujours en français.`,
-        },
-        { role: "user", content: prompt },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
-      temperature: 0.7,
-      max_tokens: 2500,
+      temperature: 0.3,
+      max_tokens: 3000,
     });
 
-    const analysis = completion.choices[0]?.message?.content || "Impossible de générer l'analyse.";
+    const raw = completion.choices[0]?.message?.content || "";
 
-    return NextResponse.json({ analysis });
+    // Extract JSON from response
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("L'IA n'a pas retourné de JSON valide");
+    }
+
+    const parsed: AnalysisResponse = JSON.parse(jsonMatch[0]);
+    return NextResponse.json(parsed);
+
   } catch (err) {
-    console.error("Analysis API error:", err);
+    console.error("Analysis error:", err);
     return NextResponse.json(
-      { error: "Erreur lors de l'analyse IA", details: String(err) },
+      { error: "Erreur lors de l'analyse", details: String(err) },
       { status: 500 }
     );
   }
