@@ -13,7 +13,7 @@ interface Props {
   excludeId?: string;
 }
 
-export default function ChampionGrid({ role, title, subtitle, onSelect, onBack, excludeId }: Props) {
+export default function ChampionGrid({ title, subtitle, onSelect, onBack, excludeId }: Props) {
   const [champions, setChampions] = useState<Champion[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -23,69 +23,83 @@ export default function ChampionGrid({ role, title, subtitle, onSelect, onBack, 
   useEffect(() => {
     fetch("/api/champions")
       .then((r) => r.json())
-      .then((d) => {
-        setChampions(d.champions || []);
-        setPatch(d.patch || "");
-      })
+      .then((d) => { setChampions(d.champions || []); setPatch(d.patch || ""); })
       .finally(() => setLoading(false));
   }, []);
 
   const filtered = champions.filter(
-    (c) =>
-      c.id !== excludeId &&
-      c.name.toLowerCase().includes(search.toLowerCase())
+    (c) => c.id !== excludeId && c.name.toLowerCase().includes(search.toLowerCase())
   );
 
   function handleSelect(c: Champion) {
     setSelected(c.id);
-    setTimeout(() => onSelect(c), 150);
+    setTimeout(() => onSelect(c), 120);
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-gray-400 hover:text-white transition text-sm flex items-center gap-1"
-        >
+    <div className="flex flex-col gap-5 fade-in-up">
+      {/* Header row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={onBack} className="btn-ghost text-xs">
           ← Retour
         </button>
-        <div className="gold-divider flex-1" />
-        {patch && <span className="text-xs text-gray-600">Patch {patch}</span>}
+        <div className="gold-divider flex-1 min-w-[40px]" />
+        {patch && (
+          <span className="badge badge-gold">Patch {patch}</span>
+        )}
       </div>
 
+      {/* Title */}
       <div>
-        <h2 className="text-xl font-bold text-white">{title}</h2>
-        <p className="text-gray-400 text-sm mt-1">{subtitle}</p>
+        <h2
+          className="text-2xl font-bold text-white"
+          style={{ fontFamily: 'Rajdhani, sans-serif' }}
+        >
+          {title}
+        </h2>
+        <p className="text-[#8A9BB5] text-sm mt-1">{subtitle}</p>
       </div>
 
       {/* Search */}
-      <input
-        type="text"
-        placeholder="Rechercher un champion..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        autoFocus
-        className="w-full max-w-sm px-4 py-2 rounded-lg bg-[#0A1428] border border-[#1E3A5F] text-white placeholder-gray-500 focus:outline-none focus:border-[#C8A847] transition"
-      />
+      <div className="relative w-full max-w-xs">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3A4A60] text-sm pointer-events-none">
+          🔍
+        </span>
+        <input
+          type="text"
+          placeholder="Rechercher un champion..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoFocus
+          className="search-input pl-9"
+        />
+      </div>
+
+      {/* Count */}
+      {!loading && (
+        <p className="text-[#3A4A60] text-xs">
+          {filtered.length} champion{filtered.length > 1 ? "s" : ""}
+          {search && ` pour "${search}"`}
+        </p>
+      )}
 
       {/* Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4 py-24">
           <div className="spinner" />
+          <p className="text-[#3A4A60] text-sm">Chargement des champions...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
+        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-14 gap-1.5">
           {filtered.map((c) => (
             <button
               key={c.id}
               onClick={() => handleSelect(c)}
               title={c.name}
-              className={`champion-item flex flex-col items-center gap-1 p-1 rounded-lg bg-[#0A1428] border transition-all duration-150
+              className={`champion-item flex flex-col items-center gap-1 p-1 rounded-lg border bg-[rgba(11,22,40,0.6)] transition-all
                 ${selected === c.id
-                  ? "border-[#C8A847] scale-105"
-                  : "border-[#1E3A5F] hover:border-[#C8A847]"
+                  ? "border-[#C8A847] selected"
+                  : "border-[rgba(200,168,71,0.08)]"
                 }`}
             >
               <div className="w-full aspect-square relative rounded overflow-hidden">
@@ -97,8 +111,11 @@ export default function ChampionGrid({ role, title, subtitle, onSelect, onBack, 
                   className="object-cover"
                   unoptimized
                 />
+                {selected === c.id && (
+                  <div className="absolute inset-0 bg-[#C8A847] opacity-20" />
+                )}
               </div>
-              <span className="text-[10px] text-gray-300 truncate w-full text-center leading-tight">
+              <span className="text-[9px] text-[#8A9BB5] truncate w-full text-center leading-tight px-0.5">
                 {c.name}
               </span>
             </button>
@@ -107,7 +124,9 @@ export default function ChampionGrid({ role, title, subtitle, onSelect, onBack, 
       )}
 
       {!loading && filtered.length === 0 && (
-        <p className="text-gray-500 text-center py-8">Aucun champion trouvé pour &quot;{search}&quot;</p>
+        <div className="text-center py-16">
+          <p className="text-[#3A4A60] text-sm">Aucun champion pour &quot;{search}&quot;</p>
+        </div>
       )}
     </div>
   );
