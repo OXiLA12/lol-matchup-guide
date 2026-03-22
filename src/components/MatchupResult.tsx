@@ -16,11 +16,11 @@ const ROLE_LABELS: Record<Role, string> = {
   top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot / ADC", support: "Support",
 };
 
-const LOADING_TIPS = [
+const TIPS = [
   "Analyse des données Lolalytics Emerald+...",
   "Calcul des winrates par matchup...",
   "Génération de la stratégie early game...",
-  "Analyse des builds optimaux...",
+  "Analyse des items optimaux...",
   "Finalisation de l'analyse IA...",
 ];
 
@@ -28,178 +28,140 @@ export default function MatchupResult({ yourChamp, enemyChamp, role, onReset }: 
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [buildFetched, setBuildFetched] = useState(false);
-  const [tipIndex, setTipIndex] = useState(0);
+  const [buildOk, setBuildOk] = useState(false);
+  const [tip, setTip] = useState(0);
 
-  // Rotate loading tips
   useEffect(() => {
     if (!loading) return;
-    const interval = setInterval(() => {
-      setTipIndex((i) => (i + 1) % LOADING_TIPS.length);
-    }, 1800);
-    return () => clearInterval(interval);
+    const t = setInterval(() => setTip(i => (i + 1) % TIPS.length), 1800);
+    return () => clearInterval(t);
   }, [loading]);
 
   useEffect(() => {
-    async function run() {
-      setLoading(true);
-      setError("");
-      setAnalysis("");
-      setBuildFetched(false);
+    (async () => {
+      setLoading(true); setError(""); setAnalysis(""); setBuildOk(false);
 
       let buildData = null;
       try {
-        const buildRes = await fetch(
-          `/api/builds?champId=${yourChamp.key}&champName=${encodeURIComponent(yourChamp.id)}&role=${role}`
-        );
-        const buildJson = await buildRes.json();
-        buildData = buildJson.raw || null;
-        setBuildFetched(!!buildData);
-      } catch { /* continue without build data */ }
+        const r = await fetch(`/api/builds?champId=${yourChamp.key}&champName=${encodeURIComponent(yourChamp.id)}&role=${role}`);
+        const j = await r.json();
+        buildData = j.raw || null;
+        setBuildOk(!!buildData);
+      } catch { /* continue */ }
 
       try {
-        const res = await fetch("/api/analysis", {
+        const r = await fetch("/api/analysis", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            yourChamp: yourChamp.name,
-            enemyChamp: enemyChamp.name,
-            role: ROLE_LABELS[role],
-            buildData,
-          }),
+          body: JSON.stringify({ yourChamp: yourChamp.name, enemyChamp: enemyChamp.name, role: ROLE_LABELS[role], buildData }),
         });
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
-        setAnalysis(json.analysis);
-      } catch (err) {
-        setError(String(err));
+        const j = await r.json();
+        if (j.error) throw new Error(j.error);
+        setAnalysis(j.analysis);
+      } catch (e) {
+        setError(String(e));
       } finally {
         setLoading(false);
       }
-    }
-    run();
+    })();
   }, [yourChamp, enemyChamp, role]);
 
   return (
-    <div className="flex flex-col gap-5 fade-in-up">
-      {/* Matchup banner */}
-      <div className="glass-card p-5 relative overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute -left-10 top-1/2 -translate-y-1/2 w-40 h-40 bg-[#C8A847] opacity-5 blur-3xl rounded-full pointer-events-none" />
-        <div className="absolute -right-10 top-1/2 -translate-y-1/2 w-40 h-40 bg-red-600 opacity-5 blur-3xl rounded-full pointer-events-none" />
+    <div className="fade-up flex flex-col gap-4">
 
-        <div className="flex items-center gap-4 relative z-10">
-          {/* Your champion */}
-          <ChampionCard
-            champ={yourChamp}
-            label={ROLE_LABELS[role]}
-            labelColor="text-[#C8A847]"
-            borderColor="border-[#C8A847]"
-            glow="shadow-[0_0_20px_rgba(200,168,71,0.3)]"
-          />
+      {/* ── Matchup header card ── */}
+      <div className="card p-4">
+        <div className="flex items-center gap-4">
 
-          {/* VS center */}
-          <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
-            <span
-              className="text-3xl font-black text-[#1E3A5F] tracking-wider"
-              style={{ fontFamily: 'Rajdhani, sans-serif' }}
-            >
-              VS
-            </span>
-            <div className="gold-divider w-full" />
-            {buildFetched && (
-              <span className="badge badge-green text-[10px]">✓ Builds Lolalytics</span>
-            )}
-            {!buildFetched && !loading && (
-              <span className="badge badge-gold text-[10px]">IA Knowledge</span>
-            )}
+          {/* Your champ */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-12 h-12 rounded-md overflow-hidden border border-[rgba(200,168,71,0.4)]">
+              <Image src={yourChamp.image} alt={yourChamp.name} fill sizes="48px" className="object-cover" unoptimized />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-white">{yourChamp.name}</div>
+              <div className="text-[11px] text-[var(--gold)]">{ROLE_LABELS[role]}</div>
+            </div>
           </div>
 
-          {/* Enemy champion */}
-          <ChampionCard
-            champ={enemyChamp}
-            label="Ennemi"
-            labelColor="text-red-400"
-            borderColor="border-red-800"
-            glow="shadow-[0_0_20px_rgba(194,59,34,0.25)]"
-          />
+          {/* VS */}
+          <div className="flex-1 flex items-center justify-center">
+            <span className="text-xs font-semibold text-[hsl(var(--muted-foreground))] tracking-widest">VS</span>
+          </div>
 
-          {/* Reset */}
-          <button
-            onClick={onReset}
-            className="btn-ghost ml-auto self-start hidden sm:flex"
-          >
-            ← Nouveau matchup
-          </button>
+          {/* Enemy champ */}
+          <div className="flex items-center gap-3">
+            <div>
+              <div className="text-sm font-medium text-white text-right">{enemyChamp.name}</div>
+              <div className="text-[11px] text-[var(--red)] text-right">Ennemi</div>
+            </div>
+            <div className="relative w-12 h-12 rounded-md overflow-hidden border border-[rgba(248,113,113,0.4)]">
+              <Image src={enemyChamp.image} alt={enemyChamp.name} fill sizes="48px" className="object-cover" unoptimized />
+            </div>
+          </div>
+
+          {/* Spacer + reset */}
+          <div className="ml-auto hidden sm:block">
+            <button onClick={onReset} className="btn btn-ghost text-xs h-8">← Nouveau</button>
+          </div>
         </div>
 
-        <button onClick={onReset} className="btn-ghost mt-4 w-full sm:hidden">
-          ← Nouveau matchup
-        </button>
+        {/* Status row */}
+        <div className="mt-3 pt-3 border-t flex items-center gap-2 flex-wrap">
+          {buildOk
+            ? <span className="badge badge-green text-[10px]">✓ Builds Lolalytics chargés</span>
+            : !loading && <span className="badge badge-outline text-[10px]">Analyse depuis connaissance IA</span>
+          }
+          <span className="badge badge-outline text-[10px]">Groq LLaMA 3.3 70B</span>
+          <button onClick={onReset} className="btn btn-ghost text-xs h-7 sm:hidden ml-auto">← Nouveau</button>
+        </div>
       </div>
 
-      {/* Analysis panel */}
-      <div className="glass-card p-6">
-        {/* Panel header */}
-        <div className="flex items-center justify-between mb-5">
-          <h2
-            className="text-lg font-bold text-white flex items-center gap-2"
-            style={{ fontFamily: 'Rajdhani, sans-serif', letterSpacing: '0.05em' }}
-          >
-            <span className="text-[#C8A847]">⚔</span>
-            Analyse : {yourChamp.name} <span className="text-[#3A4A60]">vs</span> {enemyChamp.name}
+      {/* ── Analysis card ── */}
+      <div className="card p-5">
+        {/* Card header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-white">
+            Analyse : {yourChamp.name} <span className="text-[hsl(var(--muted-foreground))]">vs</span> {enemyChamp.name}
           </h2>
-          <span className="badge badge-blue text-[10px]">Groq LLaMA 3.3 70B</span>
+          {!loading && analysis && (
+            <span className="badge badge-gold text-[10px]">✓ Analyse complète</span>
+          )}
         </div>
+        <div className="divider mb-4" />
 
-        <div className="gold-divider mb-6" />
-
-        {/* Loading state */}
+        {/* Loading */}
         {loading && (
-          <div className="flex flex-col items-center gap-6 py-16">
-            {/* Animated champions during load */}
-            <div className="flex items-center gap-6">
-              <div className="w-14 h-14 relative rounded-xl overflow-hidden border border-[rgba(200,168,71,0.3)] opacity-70">
-                <Image src={yourChamp.image} alt={yourChamp.name} fill sizes="56px" className="object-cover" unoptimized />
+          <div className="flex flex-col items-center gap-4 py-14">
+            <div className="flex items-center gap-4">
+              <div className="relative w-10 h-10 rounded-md overflow-hidden opacity-60">
+                <Image src={yourChamp.image} alt="" fill sizes="40px" className="object-cover" unoptimized />
               </div>
               <div className="spinner" />
-              <div className="w-14 h-14 relative rounded-xl overflow-hidden border border-[rgba(239,68,68,0.3)] opacity-70">
-                <Image src={enemyChamp.image} alt={enemyChamp.name} fill sizes="56px" className="object-cover" unoptimized />
+              <div className="relative w-10 h-10 rounded-md overflow-hidden opacity-60">
+                <Image src={enemyChamp.image} alt="" fill sizes="40px" className="object-cover" unoptimized />
               </div>
             </div>
-            <div className="text-center">
-              <p className="text-[#8A9BB5] text-sm transition-all duration-500">
-                {LOADING_TIPS[tipIndex]}
-              </p>
-              <p className="text-[#3A4A60] text-xs mt-2">Analyse IA en cours...</p>
-            </div>
+            <p className="text-sm text-[hsl(var(--muted-foreground))] text-center transition-all">{TIPS[tip]}</p>
           </div>
         )}
 
         {/* Error */}
         {error && !loading && (
-          <div className="rounded-xl border border-red-900/50 bg-red-950/20 p-5">
-            <p className="text-red-400 font-semibold mb-1">Erreur d&apos;analyse</p>
-            <p className="text-red-400/70 text-sm">{error}</p>
-            <button onClick={onReset} className="btn-ghost mt-4 text-xs">
-              ← Réessayer
-            </button>
+          <div className="rounded-md border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)] p-4">
+            <p className="text-sm text-[var(--red)] font-medium">Erreur d&apos;analyse</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{error}</p>
+            <button onClick={onReset} className="btn btn-ghost text-xs h-7 mt-3">← Réessayer</button>
           </div>
         )}
 
-        {/* Analysis content */}
+        {/* Analysis */}
         {analysis && !loading && (
           <div className="analysis-body">
             <ReactMarkdown
               components={{
-                h2: ({ children }) => (
-                  <h2>{children}</h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-white font-semibold text-sm mt-4 mb-2 uppercase tracking-wider text-[#8A9BB5]">
-                    {children}
-                  </h3>
-                ),
+                h2: ({ children }) => <h2>{children}</h2>,
+                h3: ({ children }) => <h3 className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mt-4 mb-2">{children}</h3>,
                 p: ({ children }) => <p>{children}</p>,
                 ul: ({ children }) => <ul>{children}</ul>,
                 li: ({ children }) => <li>{children}</li>,
@@ -211,34 +173,6 @@ export default function MatchupResult({ yourChamp, enemyChamp, role, onReset }: 
             </ReactMarkdown>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function ChampionCard({
-  champ,
-  label,
-  labelColor,
-  borderColor,
-  glow,
-}: {
-  champ: Champion;
-  label: string;
-  labelColor: string;
-  borderColor: string;
-  glow: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2 shrink-0">
-      <div className={`w-16 h-16 sm:w-20 sm:h-20 relative rounded-xl overflow-hidden border-2 ${borderColor} ${glow}`}>
-        <Image src={champ.image} alt={champ.name} fill sizes="80px" className="object-cover" unoptimized />
-      </div>
-      <div className="text-center">
-        <div className="text-white text-sm font-semibold" style={{ fontFamily: 'Rajdhani, sans-serif' }}>
-          {champ.name}
-        </div>
-        <div className={`text-xs ${labelColor}`}>{label}</div>
       </div>
     </div>
   );
