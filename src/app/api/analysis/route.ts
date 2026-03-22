@@ -11,11 +11,19 @@ interface AnalysisRequest {
 }
 
 export interface AnalysisResponse {
+  matchup: {
+    winrate: number;        // estimated winrate 0-100
+    difficulty: "Facile" | "Moyen" | "Difficile" | "Très difficile";
+    difficultyScore: number; // 1-5
+    advantage: "Avantage" | "Neutre" | "Désavantage";
+    tip: string;            // one-line matchup tip
+  };
   build: {
-    startItems: string[];       // item names
+    startItems: string[];
     firstItem: string;
-    coreItems: string[];        // 3-4 items names
+    coreItems: string[];
     boots: string;
+    antiHeal: string[];     // anti-heal items if enemy has sustain
     situational: string[];
     runes: {
       keystone: string;
@@ -24,7 +32,7 @@ export interface AnalysisResponse {
     };
     spells: string[];
   };
-  analysis: string;             // markdown analysis text
+  analysis: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -32,44 +40,54 @@ export async function POST(req: NextRequest) {
     const body: AnalysisRequest = await req.json();
     const { yourChamp, enemyChamp, role, itemCatalog } = body;
 
-    // Build a concise item name list for the AI to reference
-    const itemNames = Object.values(itemCatalog)
-      .map(i => i.name)
-      .join(", ");
+    const itemNames = Object.values(itemCatalog).map(i => i.name).join(", ");
 
-    const systemPrompt = `Tu es un coach League of Legends Diamond+ spécialisé dans les matchups.
-Tu as une connaissance parfaite du patch actuel (patch 16.6.1, Saison 2025) et de tous les items disponibles.
-Tu réponds TOUJOURS en français.
-Tu dois UNIQUEMENT utiliser des items qui existent dans la liste fournie. Ne jamais inventer des items.
-Les items populaires en méta actuelle incluent (selon les rôles) : Éclipse, Brèche de Serylda, Cyclosabre voltaïque, Lame de l'infini, Kraken, Sceptre ange gardien, Rabadon, Luden, Heartsteel, Triforce, etc.`;
+    // Anti-heal items list (always in French)
+    const antiHealItems = [
+      "Cœur brisé", "Exécuteur", "Ombre funeste", "Morellonomicon",
+      "Masque de Lièvre", "Briseur de chaînes", "Lame du Roi déchu",
+    ];
+
+    const systemPrompt = `Tu es un coach League of Legends Diamond+ expert en matchups (patch 16.6.1, Saison 2025).
+Tu réponds UNIQUEMENT en français.
+Tu dois utiliser les VRAIS noms français des items tels qu'ils existent dans le jeu (ex: "Cyclosabre voltaïque", "Éclipse", "Brèche de Serylda", "Lame de l'infini").
+JAMAIS inventer un item qui n'existe pas dans la liste fournie.
+Pour les items anti-heal, utilise: ${antiHealItems.join(", ")}.`;
 
     const userPrompt = `MATCHUP: ${yourChamp} (${role}) vs ${enemyChamp}
 
-Items disponibles dans le patch actuel (extrait) : ${itemNames.slice(0, 2000)}
+Items disponibles patch 16.6.1: ${itemNames.slice(0, 3000)}
 
-Réponds avec un JSON STRICTEMENT valide dans ce format (et RIEN d'autre avant ou après le JSON):
+Réponds UNIQUEMENT avec ce JSON valide (sans texte avant ou après):
 {
-  "build": {
-    "startItems": ["nom item 1", "nom item 2"],
-    "firstItem": "Nom du 1er item complet à acheter",
-    "coreItems": ["item 2", "item 3", "item 4"],
-    "boots": "Nom des bottes",
-    "situational": ["item situationnel 1 si ${enemyChamp} fed"],
-    "runes": {
-      "keystone": "Nom de la keystone",
-      "primary": ["rune 1", "rune 2", "rune 3"],
-      "secondary": ["rune 1", "rune 2"]
-    },
-    "spells": ["Éclair", "Ignition"]
+  "matchup": {
+    "winrate": <number entre 40 et 60, winrate estimé de ${yourChamp} vs ${enemyChamp} en ${role}>,
+    "difficulty": <"Facile"|"Moyen"|"Difficile"|"Très difficile">,
+    "difficultyScore": <1 à 5>,
+    "advantage": <"Avantage"|"Neutre"|"Désavantage">,
+    "tip": "<conseil en 1 phrase pour ce matchup>"
   },
-  "analysis": "## Build optimal\\n\\nExplication ici...\\n\\n## Phase de couloir (Early)\\n\\nConseils early...\\n\\n## Mid game\\n\\nConseils mid...\\n\\n## Late game\\n\\nConseils late...\\n\\n## Résumé\\n\\n- Point clé 1\\n- Point clé 2\\n- Point clé 3"
+  "build": {
+    "startItems": ["<item départ 1>", "<item départ 2>"],
+    "firstItem": "<1er item complet mythique ou legendary ADAPTÉ à ce matchup>",
+    "coreItems": ["<item 2>", "<item 3>", "<item 4>"],
+    "boots": "<nom bottes>",
+    "antiHeal": <si ${enemyChamp} a du sustain/heal: ["<item antiheal adapté au rôle>"], sinon: []>,
+    "situational": ["<item situationnel si ${enemyChamp} est difficile>"],
+    "runes": {
+      "keystone": "<keystone>",
+      "primary": ["<rune 1>", "<rune 2>", "<rune 3>"],
+      "secondary": ["<rune 1>", "<rune 2>"]
+    },
+    "spells": ["Éclair", "<2ème sort adapté>"]
+  },
+  "analysis": "## Phase de couloir (Early game)\\n\\nConseils détaillés... Sorts de ${enemyChamp} à éviter: **Q** (description), **E** (description)...\\n\\n## Mid game (15-25 min)\\n\\nConseils...\\n\\n## Late game (25+ min)\\n\\nConseils...\\n\\n## Conseils clés\\n\\n- Point 1\\n- Point 2\\n- Point 3"
 }
 
-IMPORTANT:
-- Pour ${yourChamp}, utilise les items META ACTUELS (patch 16.6.1)
-- L'item "firstItem" doit être le mythique/premier item recommandé pour ce matchup spécifique
-- L'analysis doit être détaillée avec les spells de ${enemyChamp} à éviter (avec leur lettre: Q/W/E/R)
-- Utilise les VRAIS noms français des items tels qu'ils apparaissent dans le jeu`;
+RÈGLES IMPORTANTES:
+- "firstItem" doit être l'item META pour ${yourChamp} en ${role} au patch 16.6.1 (ex: pour Naafiri mid → Cyclosabre voltaïque)
+- Si ${enemyChamp} a du healing (Soraka, Darius, Aatrox, Sylas, etc), ajoute un item anti-heal dans "antiHeal"
+- Le "winrate" doit refléter la vraie force du matchup selon ta connaissance`;
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -77,17 +95,13 @@ IMPORTANT:
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.3,
-      max_tokens: 3000,
+      temperature: 0.25,
+      max_tokens: 3500,
     });
 
     const raw = completion.choices[0]?.message?.content || "";
-
-    // Extract JSON from response
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("L'IA n'a pas retourné de JSON valide");
-    }
+    if (!jsonMatch) throw new Error("L'IA n'a pas retourné de JSON valide: " + raw.slice(0, 200));
 
     const parsed: AnalysisResponse = JSON.parse(jsonMatch[0]);
     return NextResponse.json(parsed);
