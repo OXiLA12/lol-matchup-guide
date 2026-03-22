@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import type { AnalysisResponse } from "@/types";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -10,31 +11,6 @@ interface AnalysisRequest {
   itemCatalog: Record<string, { name: string; tags: string[] }>;
 }
 
-export interface AnalysisResponse {
-  matchup: {
-    winrate: number;        // estimated winrate 0-100
-    difficulty: "Facile" | "Moyen" | "Difficile" | "Très difficile";
-    difficultyScore: number; // 1-5
-    advantage: "Avantage" | "Neutre" | "Désavantage";
-    tip: string;            // one-line matchup tip
-  };
-  build: {
-    startItems: string[];
-    firstItem: string;
-    coreItems: string[];
-    boots: string;
-    antiHeal: string[];     // anti-heal items if enemy has sustain
-    situational: string[];
-    runes: {
-      keystone: string;
-      primary: string[];
-      secondary: string[];
-    };
-    spells: string[];
-  };
-  analysis: string;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body: AnalysisRequest = await req.json();
@@ -42,7 +18,6 @@ export async function POST(req: NextRequest) {
 
     const itemNames = Object.values(itemCatalog).map(i => i.name).join(", ");
 
-    // Anti-heal items list (always in French)
     const antiHealItems = [
       "Cœur brisé", "Exécuteur", "Ombre funeste", "Morellonomicon",
       "Masque de Lièvre", "Briseur de chaînes", "Lame du Roi déchu",
@@ -84,10 +59,10 @@ Réponds UNIQUEMENT avec ce JSON valide (sans texte avant ou après):
   "analysis": "## Phase de couloir (Early game)\\n\\nConseils détaillés... Sorts de ${enemyChamp} à éviter: **Q** (description), **E** (description)...\\n\\n## Mid game (15-25 min)\\n\\nConseils...\\n\\n## Late game (25+ min)\\n\\nConseils...\\n\\n## Conseils clés\\n\\n- Point 1\\n- Point 2\\n- Point 3"
 }
 
-RÈGLES IMPORTANTES:
+RÈGLES:
 - "firstItem" doit être l'item META pour ${yourChamp} en ${role} au patch 16.6.1 (ex: pour Naafiri mid → Cyclosabre voltaïque)
-- Si ${enemyChamp} a du healing (Soraka, Darius, Aatrox, Sylas, etc), ajoute un item anti-heal dans "antiHeal"
-- Le "winrate" doit refléter la vraie force du matchup selon ta connaissance`;
+- Si ${enemyChamp} a du healing, ajoute un item anti-heal dans "antiHeal"
+- Le "winrate" doit refléter la vraie force du matchup`;
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
@@ -103,7 +78,7 @@ RÈGLES IMPORTANTES:
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("L'IA n'a pas retourné de JSON valide: " + raw.slice(0, 200));
 
-    const parsed: AnalysisResponse = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]) as AnalysisResponse;
     return NextResponse.json(parsed);
 
   } catch (err) {

@@ -1,16 +1,8 @@
 import { NextResponse } from "next/server";
+import { ItemData } from "@/types";
 
 let cache: { items: Record<string, ItemData>; patch: string; ts: number } | null = null;
 const TTL = 3600 * 1000;
-
-export interface ItemData {
-  id: string;
-  name: string;
-  description: string;
-  image: string;
-  gold: number;
-  tags: string[];
-}
 
 async function getLatestPatch(): Promise<string> {
   const r = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");

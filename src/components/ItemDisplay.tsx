@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { ItemData } from "@/app/api/items/route";
+import { ItemData } from "@/types";
 
 interface Props {
   itemName: string;

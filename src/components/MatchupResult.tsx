@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { Champion, Role } from "@/app/page";
-import { AnalysisResponse } from "@/app/api/analysis/route";
-import { ItemData } from "@/app/api/items/route";
+import { AnalysisResponse, ItemData } from "@/types";
 import { ItemIcon, BuildSection } from "@/components/ItemDisplay";
 
 interface Props {
